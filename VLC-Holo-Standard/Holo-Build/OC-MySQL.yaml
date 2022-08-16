@@ -91,7 +91,7 @@ write_files:
     sudo rm -rf /etc/netplan/50-cloud-init.yaml
     sudo mv /etc/holodeck/90-sdn-lab.yaml /etc/netplan/10-sdn-lab.yaml
     #shutdown
-    # shutdown -h now
+    sudo shutdown -h now
 
 
 runcmd:
