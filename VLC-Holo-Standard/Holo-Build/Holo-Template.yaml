@@ -116,10 +116,6 @@ write_files:
     sudo swapoff --all
     sudo sed -ri '/\sswap\s/s/^#?/#/' /etc/fstab
 
-    # set dhcp to use mac - this is a little bit of a hack but I need this to be placed under the active nic settings
-    # also look in /etc/netplan for other config files
-    #sed -i 's/optional: true/dhcp-identifier: mac/g' /etc/netplan/50-cloud-init.yaml
-
     # cleans out all of the cloud-init cache / logs - this is mainly cleaning out networking info
     sudo cloud-init clean --logs
     sudo truncate -s 0 /etc/machine-id
@@ -133,7 +129,6 @@ write_files:
     sudo tee /etc/cloud/cloud.cfg.d/90_dpkg.cfg > /dev/null << EOF
     datasource_list: [ OVF ]
     EOF
-    #sudo touch /etc/cloud/cloud-init.disabled
     #shutdown
     sudo shutdown -h now
 runcmd:
