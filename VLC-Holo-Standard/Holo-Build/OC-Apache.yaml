@@ -71,7 +71,7 @@ write_files:
     sudo sed -i "s/##MySQL-IPAddress##/##Lab-MySQL-IPAddress##/g" /var/www/opencart/admin/config.php
     sudo touch /etc/cloud/cloud-init.disabled
     sudo rm -rf /etc/netplan/50-cloud-init.yaml
-    sudo mv /etc/holodeck/90-sdn-lab.yaml /etc/netplan/10-sdn-lab.yaml
+    sudo mv /etc/holodeck/90-sdn-lab.yaml /etc/netplan/01-netcfg.yaml
     #shutdown
     sudo shutdown -h now
 
