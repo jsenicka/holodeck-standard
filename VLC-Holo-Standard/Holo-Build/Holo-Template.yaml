@@ -133,7 +133,7 @@ write_files:
     sudo tee /etc/cloud/cloud.cfg.d/90_dpkg.cfg > /dev/null << EOF
     datasource_list: [ OVF ]
     EOF
-    sudo touch /etc/cloud/cloud-init.disabled
+    #sudo touch /etc/cloud/cloud-init.disabled
     #shutdown
     sudo shutdown -h now
 runcmd:
