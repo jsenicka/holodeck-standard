@@ -71,7 +71,7 @@ write_files:
      version: 2
      ethernets:
       ens192:
-       addresses: ##IPAddressCIDR##
+       addresses: ##Lab-IPAddressCIDR##
        gateway4: ##Lab-Gateway##
        dhcp6: false
        nameservers:
@@ -89,7 +89,7 @@ write_files:
     set -v
     sudo touch /etc/cloud/cloud-init.disabled
     sudo rm -rf /etc/netplan/50-cloud-init.yaml
-    sudo mv /etc/holodeck/90-sdn-lab.yaml /etc/netplan/10-sdn-lab.yaml
+    sudo mv /etc/holodeck/90-sdn-lab.yaml /etc/netplan/01-netcfg.yaml
     #shutdown
     sudo shutdown -h now
 
