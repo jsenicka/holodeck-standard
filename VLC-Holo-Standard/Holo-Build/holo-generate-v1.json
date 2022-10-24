@@ -1,0 +1,81 @@
+{
+  "Datastore": "vcf-vsan",
+  "Cluster": "mgmt-cluster-01",
+  "VMFolder": "Holodeck",
+  "Portgroup": "sddc-vds01-mgmt",
+  "OvaFile": ".\\bionic.ova",
+  "Sets": [
+    {
+      "Instances": [
+        {
+          "HostName": "OC-MySQL",
+          "FQDN": "OC-MySQL.vcf.sddc.lab",
+          "IPAddress": "10.0.0.70",
+		  "IPAddressCIDR": "[10.0.0.70/24]",
+          "Gateway": "10.0.0.1",
+		  "Lab-IPAddress": "10.1.1.50",
+		  "Lab-IPAddressCIDR": "[10.1.1.50/27]",
+          "Lab-Gateway": "10.1.1.33",
+          "DNSServer1": "10.0.0.221",
+          "DNSSearchDomain": "vcf.sddc.lab",
+          "YamlTemplate": "OC-MySQL.yaml"
+        },
+        {
+          "HostName": "OC-Apache-A",
+          "FQDN": "OC-Apache-A.vcf.sddc.lab",
+          "IPAddress": "10.0.0.71",
+		  "IPAddressCIDR": "[10.0.0.71/24]",
+		  "Gateway": "10.0.0.1",
+		  "MySQL-IPAddress": "10.0.0.70",
+		  "Lab-IPAddress": "10.1.1.18",
+		  "Lab-IPAddressCIDR": "[10.1.1.18/27]",
+          "Lab-Gateway": "10.1.1.1",
+		  "Lab-MySQL-IPAddress": "10.1.1.50",
+          "DNSServer1": "10.0.0.221",
+          "DNSSearchDomain": "vcf.sddc.lab",
+          "YamlTemplate": "OC-Apache.yaml"
+        },
+        {
+          "HostName": "OC-Apache-B",
+          "FQDN": "OC-Apache-B.vcf.sddc.lab",
+          "IPAddress": "10.0.0.72",
+		  "IPAddressCIDR": "[10.0.0.72/24]",
+          "Gateway": "10.0.0.1",
+ 		  "MySQL-IPAddress": "10.0.0.70",
+		  "Lab-IPAddress": "10.1.1.19",
+		  "Lab-IPAddressCIDR": "[10.1.1.19/27]",
+	      "Lab-Gateway": "10.1.1.1",
+		  "Lab-MySQL-IPAddress": "10.1.1.50",
+          "DNSServer1": "10.0.0.221",
+          "DNSSearchDomain": "vcf.sddc.lab",
+          "YamlTemplate": "OC-Apache.yaml"
+        },
+        {
+          "HostName": "OC-Apache-C",
+          "FQDN": "OC-Apache-C.vcf.sddc.lab",
+          "IPAddress": "10.0.0.73",
+		  "IPAddressCIDR": "[10.0.0.73/24]",
+          "Gateway": "10.0.0.1",
+		  "MySQL-IPAddress": "10.0.0.70",
+		  "Lab-IPAddress": "10.1.1.20",
+		  "Lab-IPAddressCIDR": "[10.1.1.20/27]",
+          "Lab-Gateway": "10.1.1.1",
+		  "Lab-MySQL-IPAddress": "10.1.1.50",		  
+          "DNSServer1": "10.0.0.221",
+          "DNSSearchDomain": "vcf.sddc.lab",
+          "YamlTemplate": "OC-Apache.yaml"
+        },
+		{
+          "HostName": "Holo-Template",
+          "FQDN": "Holo-Template.vcf.sddc.lab",
+          "IPAddress": "10.0.0.60",
+		  "IPAddressCIDR": "[10.0.0.60/24]",
+		  "Gateway": "10.0.0.1",
+		  "DNSServer1": "10.0.0.221",
+          "DNSSearchDomain": "vcf.sddc.lab",
+          "YamlTemplate": "Holo-Template.yaml"
+        }
+      ]
+    }
+  ]
+}
