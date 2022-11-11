@@ -1,0 +1,212 @@
+#cloud-config
+hostname: ##HostName##
+
+fqdn: ##FQDN##
+
+write_files:
+- path: /etc/netplan/50-cloud-init.yaml
+  content: |
+    network:
+     version: 2
+     ethernets:
+      ens192:
+       addresses: ##IPAddressCIDR##
+       gateway4: ##Gateway##
+       dhcp6: false
+       nameservers:
+         addresses:
+           - ##DNSServer1##
+         search:
+           - ##DNSSearchDomain##
+       dhcp4: false
+       optional: true
+- path: /etc/sysctl.d/60-disable-ipv6.conf
+  owner: root
+  content: |
+    net.ipv6.conf.all.disable_ipv6=1
+    net.ipv6.conf.default.disable_ipv6=1
+    net.ipv6.conf.lo.disable_ipv6=1
+# - path: /etc/cloud/cloud.cfg.d/91_dkpg.cfg
+  # owner: root
+  # content: datasource_list: [ OVF ]
+- path: /root/disable_ipv6.sh
+  permissions: 0744
+  owner: root
+  content: |
+    #!/usr/bin/env bash
+    set -e
+    echo "net.ipv6.conf.all.disable_ipv6 = 1" >> /etc/sysctl.conf
+    echo "net.ipv6.conf.default.disable_ipv6 = 1" >> /etc/sysctl.conf
+    echo "net.ipv6.conf.lo.disable_ipv6 = 1" >> /etc/sysctl.conf
+- path: /etc/hosts
+  content: 127.0.0.1 ##HostName##
+  append: true
+- path: /etc/holodeck/ubuntu-prepare.sh
+  owner: root
+  permissions: 0744
+  content: |
+    #!/bin/bash
+    # modified from https://jimangel.io/post/create-a-vm-template-ubuntu-18.04/ and https://blogs.vmware.com/management/2019/02/building-a-cas-ready-ubuntu-template-for-vsphere.html
+    # TESTED ON UBUNTU 18.04 LTS
+
+    set -v
+
+    #update apt-cache
+    sudo apt update -y
+    sudo apt upgrade -y
+
+    #install packages
+    sudo apt install -y open-vm-tools
+
+    #Stop services for cleanup
+    sudo service rsyslog stop
+
+    #clear audit logs
+    if [ -f /var/log/wtmp ]; then
+        sudo truncate -s0 /var/log/wtmp
+    fi
+    if [ -f /var/log/lastlog ]; then
+        sudo truncate -s0 /var/log/lastlog
+    fi
+
+    #cleanup /tmp directories
+    sudo rm -rf /tmp/*
+    sudo rm -rf /var/tmp/*
+
+    #cleanup current ssh keys
+    sudo rm -f /etc/ssh/ssh_host_*
+
+    #add check for ssh keys on reboot...regenerate if neccessary
+    cat << 'EOL' | sudo tee /etc/rc.local
+    #!/bin/sh -e
+    #
+    # rc.local
+    #
+    # This script is executed at the end of each multiuser runlevel.
+    # Make sure that the script will "" on success or any other
+    # value on error.
+    #
+    # In order to enable or disable this script just change the execution
+    # bits.
+    #
+    # By default this script does nothing.
+
+    # dynamically create hostname (optional)
+    #if hostname | grep localhost; then
+    #    hostnamectl set-hostname "$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 13 ; echo '')"
+    #fi
+
+    test -f /etc/ssh/ssh_host_dsa_key || dpkg-reconfigure openssh-server
+    exit 0
+    EOL
+
+    # make sure the script is executable
+    chmod +x /etc/rc.local
+
+    #reset hostname
+    # prevent cloudconfig from preserving the original hostname
+    sudo sed -i 's/preserve_hostname: false/preserve_hostname: true/g' /etc/cloud/cloud.cfg
+    sudo truncate -s0 /etc/hostname
+    sudo hostnamectl set-hostname localhost
+
+    #cleanup apt
+    sudo apt clean
+
+    # disable swap
+    sudo swapoff --all
+    sudo sed -ri '/\sswap\s/s/^#?/#/' /etc/fstab
+
+    # cleans out all of the cloud-init cache / logs - this is mainly cleaning out networking info
+    sudo cloud-init clean --logs
+    sudo truncate -s 0 /etc/machine-id
+    sudo rm /var/lib/dbus/machine-id
+    sudo ln -s /etc/machine-id /var/lib/dbus/machine-id
+    #cleanup shell history
+    cat /dev/null > ~/.bash_history && history -c
+    history -w
+    sudo rm -rf /etc/netplan/50-cloud-init.yaml
+    sudo rm -rf /etc/cloud.cloud.cfg.d/90_dpkg.cfg
+    sudo tee /etc/cloud/cloud.cfg.d/90_dpkg.cfg > /dev/null << EOF
+    datasource_list: [ OVF ]
+    EOF
+    #shutdown
+    sudo shutdown -h now
+runcmd:
+- bash /root/disable_ipv6.sh
+- netplan --debug apply
+- sysctl -w net.ipv6.conf.all.disable_ipv6=1
+- sysctl -w net.ipv6.conf.default.disable_ipv6=1
+- sysctl -w net.ipv6.conf.lo.disable_ipv6=1
+- apt-get -y update
+- apt-get -y upgrade
+- apt-get -y clean
+- export USER="ocuser"
+- export PASS="VMware123!"
+# - USER=ocuser
+# - PASS=VMware123!
+- echo $USER:$PASS | /usr/sbin/chpasswd
+- sed -i "s/PasswordAuthentication no/PasswordAuthentication yes/g" /etc/ssh/sshd_config
+- apt-get -y autoremove --purge
+- apt-get -y install open-vm-tools
+- echo 'Cloud-init is done!' >> /tmp/finished.txt
+packages:
+  - apache2
+  - php
+  - php-mysql
+  - libapache2-mod-php
+  - php-cli
+  - php-common
+  - php-intl
+  - php-gd
+  - php-mbstring
+  - php-xml
+  - php-zip
+  - php-curl
+  - php-xmlrpc
+  - mysql-server-5.7
+  - unzip
+  - open-vm-tools
+timezone: America/Chicago
+system_info:
+  default_user:
+    name: default-user
+    lock_passwd: false
+    sudo: ["ALL=(ALL) NOPASSWD:ALL"]
+disable_root: false
+ssh_pwauth: yes  
+# requires mkpasswd command (whois package)
+# SHA-512 Rounds 4096
+
+users:
+  - default
+  - name: cloudadmin
+    gecos: Cloud
+    lock_passwd: false
+    groups: sudo, users, admin
+    shell: /bin/bash
+    sudo: ['ALL=(ALL) NOPASSWD:ALL']
+    password: $6$rounds=4096$L2g1RTFocPEW$u.VUUpZKxik.Mr8l4XrZRAC5o0xiiNiWBy9gx.Vy5IkQxeIMAvzCbk2kU6yRHJhzMvdMSJ/VaStqoupJqkBfS0
+  - name: ocuser
+    gecos: Opencart User
+    lock_passwd: false
+    groups: sudo, users, admin
+    shell: /bin/bash
+    sudo: ['ALL=(ALL) NOPASSWD:ALL']
+    password: $6$rounds=4096$L2g1RTFocPEW$u.VUUpZKxik.Mr8l4XrZRAC5o0xiiNiWBy9gx.Vy5IkQxeIMAvzCbk2kU6yRHJhzMvdMSJ/VaStqoupJqkBfS0
+    #expire: false
+  
+    #ssh_authorized_keys:
+    #- ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQClyiDSR+D7zweN1Hul0RwT8l5dcElrUE7BC/dODifVBeyN4XQHVTE4OUIlD6WStPfUcJudnrER08ec7YXjB3wjcxH+N5xiRaHMAh2WDONY4bWF5iVrbmM7joJmg35/sLQC6kdb3tHrgHQ4aBuel9xAKQBCpy1AGMI8isaAJpAghaubsAmQI9suc+ba8kqeUbqjgfTeFPwjNTLMhQjD6Fn/qOgcdbxa6srs5KnMeCOLgCM6kSN5+fy7T4E1VMDjkKA1DCvZN2I0/9CJQCEowtkBo086s3GI3btU3GeKmnoVS9D0EFMyvN8Axyw90qd/Q2QQMF21XKFHq5bTJ9O0rXVIW9eoJpCgOLn+Y1kj8lIkVd/rFKEIm5C6OrdcdlsAGFmhwHTdbU7ZylpuuUqlymeYrZkmUISzkkoWxOCao0nkcPnoV0fEZ7wnW/xuEsqjSq+76JTE2tPsKRu2Q0nUa5l360clhRjvR/MVGqvWLomLvm0yGkax8ZKCXENo29yWW13RGHnYgQgRkPFACqe47zisHWeATOZ2ms9Ev05gBTK9N92y3bWarWTsZ4gl8IY1GWcaNGb0lPaCZBui8Qbi1UdbzqGJhURtOwLoO9/GZB2s5irpwgyBqfWUBqmQSX3BBexE0eIuLSEEcz2pq/aMI/trCmp4uuaLQz93v3vkwHmiVQ== lucd@local.lab
+chpasswd:
+  list: |
+    default-user: $6$rounds=4096$L2g1RTFocPEW$u.VUUpZKxik.Mr8l4XrZRAC5o0xiiNiWBy9gx.Vy5IkQxeIMAvzCbk2kU6yRHJhzMvdMSJ/VaStqoupJqkBfS0
+    ocuser: $6$rounds=4096$L2g1RTFocPEW$u.VUUpZKxik.Mr8l4XrZRAC5o0xiiNiWBy9gx.Vy5IkQxeIMAvzCbk2kU6yRHJhzMvdMSJ/VaStqoupJqkBfS0 
+    cloudadmin: $6$rounds=4096$L2g1RTFocPEW$u.VUUpZKxik.Mr8l4XrZRAC5o0xiiNiWBy9gx.Vy5IkQxeIMAvzCbk2kU6yRHJhzMvdMSJ/VaStqoupJqkBfS0
+  expire: false
+package_upgrade: true
+package_reboot_if_required: true
+power_state:
+  delay: now
+  mode: reboot
+  message: Rebooting the OS
+  condition: if [ -e /var/run/reboot-required ]; then exit 0; else exit 1; fi
