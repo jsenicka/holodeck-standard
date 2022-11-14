@@ -1,0 +1,209 @@
+#cloud-config
+hostname: ##HostName##
+fqdn: ##FQDN##
+write_files:
+- path: /etc/netplan/50-cloud-init.yaml
+  content: |
+    network:
+     version: 2
+     ethernets:
+      ens192:
+       addresses: ##IPAddressCIDR##
+       gateway4: ##Gateway##
+       dhcp6: false
+       nameservers:
+         addresses:
+           - ##DNSServer1##
+         search:
+           - ##DNSSearchDomain##
+       dhcp4: false
+       optional: true
+- path: /etc/sysctl.d/60-disable-ipv6.conf
+  owner: root
+  content: |
+    net.ipv6.conf.all.disable_ipv6=1
+    net.ipv6.conf.default.disable_ipv6=1
+    net.ipv6.conf.lo.disable_ipv6=1
+- path: /root/disable_ipv6.sh
+  permissions: 0744
+  owner: root
+  content: |
+    #!/usr/bin/env bash
+    set -e
+    echo "net.ipv6.conf.all.disable_ipv6 = 1" >> /etc/sysctl.conf
+    echo "net.ipv6.conf.default.disable_ipv6 = 1" >> /etc/sysctl.conf
+    echo "net.ipv6.conf.lo.disable_ipv6 = 1" >> /etc/sysctl.conf
+- path: /etc/hosts
+  content: 127.0.0.1 ##HostName##
+  append: true
+- path: /etc/apache2/ports.conf
+  content: |
+    listen 8080
+    listen 80
+  append: true
+- path: /etc/holodeck/90-sdn-lab.yaml
+  content: |
+    network:
+     version: 2
+     ethernets:
+      ens192:
+       addresses: ##Lab-IPAddressCIDR##
+       gateway4: ##Lab-Gateway##
+       dhcp6: false
+       nameservers:
+         addresses:
+           - ##DNSServer1##
+         search:
+           - ##DNSSearchDomain##
+       dhcp4: false
+       optional: true
+- path: /etc/holodeck/sdn-lab-prepare.sh
+  owner: root
+  permissions: 0777
+  content: |
+    #!/bin/bash
+    set -v
+    export MySQLip="##Lab-MySQL-IPAddress##"
+    export OCApacheip="##Lab-IPAddress##"
+    sudo sed -i "s/##IPAddress##/##Lab-IPAddress##/g" /var/www/opencart/config.php
+    sudo sed -i "s/##MySQL-IPAddress##/##Lab-MySQL-IPAddress##/g" /var/www/opencart/config.php
+    sudo sed -i "s/##IPAddress##/##Lab-IPAddress##/g" /var/www/opencart/admin/config.php
+    sudo sed -i "s/##MySQL-IPAddress##/##Lab-MySQL-IPAddress##/g" /var/www/opencart/admin/config.php
+    sudo touch /etc/cloud/cloud-init.disabled
+    sudo rm -rf /etc/netplan/50-cloud-init.yaml
+    sudo mv /etc/holodeck/90-sdn-lab.yaml /etc/netplan/01-netcfg.yaml
+    #shutdown
+    sudo shutdown -h now
+
+runcmd:
+- bash /root/disable_ipv6.sh
+- netplan --debug apply
+- sysctl -w net.ipv6.conf.all.disable_ipv6=1
+- sysctl -w net.ipv6.conf.default.disable_ipv6=1
+- sysctl -w net.ipv6.conf.lo.disable_ipv6=1
+- apt-get -y clean
+- apt-get -y autoremove --purge
+# Begin Jim's opencart insert
+- systemctl restart apache2
+- export USER="ocuser"
+- export PASS="VMware123!"
+     #- USER=ocuser
+#- PASS=VMware123!             
+- echo $USER:$PASS | /usr/sbin/chpasswd
+- sed -i "s/PasswordAuthentication no/PasswordAuthentication yes/g" /etc/ssh/sshd_config
+- service ssh reload
+- git clone https://github.com/jsenicka/opencart-demo.git /tmp/opencart
+- sleep 30
+- mv /tmp/opencart /var/www/
+- mv /var/www/opencart/catalog/controller/startup/startup.php  /var/www/opencart/catalog/controller/startup/startup.php.orig
+- mv /var/www/opencart/oc-startup.php /var/www/opencart/catalog/controller/startup/startup.php
+- chown -R www-data.www-data /var/www/opencart
+- chmod -R 775 /var/www/opencart
+- tee /etc/apache2/sites-available/opencart.conf > /dev/null << EOF
+- <VirtualHost *:80>
+-   ServerName www.opencart.vcf.sddc.lab
+-   DocumentRoot /var/www/opencart
+-   <Directory /var/www/opencart/>
+-     AllowOverride All
+-     allow from all
+-   </Directory>
+- </VirtualHost>
+- <VirtualHost *:8080>
+-   ServerName www.opencart.vcf.sddc.lab
+-   DocumentRoot /var/www/opencart
+-   <Directory /var/www/opencart/>
+-     AllowOverride All
+-     allow from all
+-   </Directory>
+- </VirtualHost>
+- EOF
+- cd /etc/apache2/sites-available/
+- a2ensite opencart.conf
+- a2dissite 000-default.conf
+- systemctl reload apache2
+- systemctl restart apache2
+- echo "[client]" >> /etc/mysql/mysql.conf.d/mysqld.cnf
+- echo "user=ocuser" >> /etc/mysql/mysql.conf.d/mysqld.cnf
+- echo "password=$PASS" >> /etc/mysql/mysql.conf.d/mysqld.cnf
+#- MySQLip=10.50.0.205
+#- OC-Apache-A-ip=10.50.0.200
+- export MySQLip="##MySQL-IPAddress##"
+- export OCApacheip="##IPAddress##"
+- sed -i "s/MOAD Electronic Super Store/Holodeck SDN Lab OC-Apache/g" /var/www/opencart/install/opencart.sql
+- mysql -u $USER -h $MySQLip -e 'source /var/www/opencart/install/opencart.sql'
+- mysql -u $USER -h $MySQLip -e "INSERT INTO oc_user (user_id,user_group_id,username,password,salt,firstname,lastname,email,image,code,ip,status,date_added) VALUES (1,1,'admin','5feaa046f6927df3d744007ec1491dba838f672e','c4wnfrq9J','demo','user','admin@admin.com','none','none','none',1,'2019-01-31 06:29:09')" opencart
+- sed -i "s/frontendiphere/$OCApacheip/g" /var/www/opencart/config.php
+- sed -i "s/dbiphere/$MySQLip/g" /var/www/opencart/config.php
+- sed -i "s/usernamehere/$USER/g" /var/www/opencart/config.php
+- sed -i "s/passwordhere/$PASS/g" /var/www/opencart/config.php
+- sed -i "s/frontendiphere/$OCApacheip/g" /var/www/opencart/admin/config.php
+- sed -i "s/dbiphere/$MySQLip/g" /var/www/opencart/admin/config.php
+- sed -i "s/usernamehere/$USER/g" /var/www/opencart/admin/config.php
+- sed -i "s/passwordhere/$PASS/g" /var/www/opencart/admin/config.php
+- systemctl reload apache2
+- systemctl restart apache2
+- cd /tmp
+- echo "ocuser ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+- echo 'Cloud-init is done!' >> /tmp/finished.txt
+packages:
+  - apache2
+  - php
+  - php-mysql
+  - libapache2-mod-php
+  - php-cli
+  - php-common
+  - php-intl
+  - php-gd
+  - php-mbstring
+  - php-xml
+  - php-zip
+  - php-curl
+  - php-xmlrpc
+  - mysql-server-5.7
+  - unzip
+  - open-vm-tools
+timezone: America/Chicago
+system_info:
+  default_user:
+    name: default-user
+    lock_passwd: false
+    sudo: ["ALL=(ALL) NOPASSWD:ALL"]
+disable_root: false
+ssh_pwauth: yes  
+# requires mkpasswd command (whois package)
+# SHA-512 Rounds 4096
+
+                   
+               
+users:
+  - default
+  - name: cloudadmin
+    gecos: Cloud
+    lock_passwd: false
+    groups: sudo, users, admin
+    shell: /bin/bash
+    sudo: ['ALL=(ALL) NOPASSWD:ALL']
+  - name: ocuser
+    gecos: Opencart User
+    lock_passwd: false
+    groups: sudo, users, admin
+    shell: /bin/bash
+    sudo: ['ALL=(ALL) NOPASSWD:ALL']
+    #password: $6$rounds=4096$L2g1RTFocPEW$u.VUUpZKxik.Mr8l4XrZRAC5o0xiiNiWBy9gx.Vy5IkQxeIMAvzCbk2kU6yRHJhzMvdMSJ/VaStqoupJqkBfS0
+    #expire: false
+  
+    #ssh_authorized_keys:
+    #- ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQClyiDSR+D7zweN1Hul0RwT8l5dcElrUE7BC/dODifVBeyN4XQHVTE4OUIlD6WStPfUcJudnrER08ec7YXjB3wjcxH+N5xiRaHMAh2WDONY4bWF5iVrbmM7joJmg35/sLQC6kdb3tHrgHQ4aBuel9xAKQBCpy1AGMI8isaAJpAghaubsAmQI9suc+ba8kqeUbqjgfTeFPwjNTLMhQjD6Fn/qOgcdbxa6srs5KnMeCOLgCM6kSN5+fy7T4E1VMDjkKA1DCvZN2I0/9CJQCEowtkBo086s3GI3btU3GeKmnoVS9D0EFMyvN8Axyw90qd/Q2QQMF21XKFHq5bTJ9O0rXVIW9eoJpCgOLn+Y1kj8lIkVd/rFKEIm5C6OrdcdlsAGFmhwHTdbU7ZylpuuUqlymeYrZkmUISzkkoWxOCao0nkcPnoV0fEZ7wnW/xuEsqjSq+76JTE2tPsKRu2Q0nUa5l360clhRjvR/MVGqvWLomLvm0yGkax8ZKCXENo29yWW13RGHnYgQgRkPFACqe47zisHWeATOZ2ms9Ev05gBTK9N92y3bWarWTsZ4gl8IY1GWcaNGb0lPaCZBui8Qbi1UdbzqGJhURtOwLoO9/GZB2s5irpwgyBqfWUBqmQSX3BBexE0eIuLSEEcz2pq/aMI/trCmp4uuaLQz93v3vkwHmiVQ== lucd@local.lab
+chpasswd:
+  list: |
+    default-user: $6$rounds=4096$L2g1RTFocPEW$u.VUUpZKxik.Mr8l4XrZRAC5o0xiiNiWBy9gx.Vy5IkQxeIMAvzCbk2kU6yRHJhzMvdMSJ/VaStqoupJqkBfS0
+    ocuser: $6$rounds=4096$L2g1RTFocPEW$u.VUUpZKxik.Mr8l4XrZRAC5o0xiiNiWBy9gx.Vy5IkQxeIMAvzCbk2kU6yRHJhzMvdMSJ/VaStqoupJqkBfS0 
+    cloudadmin: $6$rounds=4096$L2g1RTFocPEW$u.VUUpZKxik.Mr8l4XrZRAC5o0xiiNiWBy9gx.Vy5IkQxeIMAvzCbk2kU6yRHJhzMvdMSJ/VaStqoupJqkBfS0
+  expire: false
+package_upgrade: true
+package_reboot_if_required: true
+power_state:
+  delay: now
+  mode: reboot
+  message: Rebooting the OS
+  condition: if [ -e /var/run/reboot-required ]; then exit 0; else exit 1; fi
